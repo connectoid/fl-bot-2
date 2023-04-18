@@ -31,7 +31,7 @@ def get_feed(url):
     session = requests.Session()
     session.headers.update(fake_headers)
     xml = session.get(url)
-    parser = Parser(xml=xml.content, limit=10)
+    parser = Parser(xml=xml.content)
     feed = parser.parse()
     return feed
 
