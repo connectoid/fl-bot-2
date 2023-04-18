@@ -12,7 +12,7 @@ from database.orm import (add_vacancy_to_favorite, get_new_vacancies,
                           get_favorite_vacancies, remove_vacancy_from_favorite,
                           get_vavancy_link, add_user, get_user_id, add_category_link,
                           get_user_categories_list, clear_user_categories_list,
-                          check_categories)
+                          check_categories, set_minus_filters_list, set_plus_filters_list)
 from lexicon.lexicon_ru import LEXICON_HELP, NO_ADDED_LINKS, NO_NEW_VACANCIES
 
 REQUEST_INTERVAL = 60
@@ -144,12 +144,18 @@ async def process_showlinks_command(message: Message):
 @router.message(Text(startswith='https'))
 async def process_add_category_link(message: Message):
     user_id = get_user_id(message.from_user.id)
-    link = message.text
+    pack = message.text
+    link = pack.split(';')[0].strip()
+    plus_list = pack.split(';')[1].strip()
+    minus_list = pack.split(';')[2].strip()
+    # link = message.text
     if check_category_link(link):
         if add_category_link(user_id, link):
+            set_plus_filters_list(link, plus_list)
+            set_minus_filters_list(link, minus_list)
             await message.answer(text='Категория добавлена')
     else:
-        await message.answer(text='Неправильная ссылка (не соотвтетствует ссылке на RSS fl.ru)')
+        await message.answer(text='Неправильная ссылка (не соотвтетствует ссылке на RSS fl.ru или freelance.ru)')
 
 
 @router.message(Command(commands='delmenu'))

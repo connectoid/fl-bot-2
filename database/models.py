@@ -13,6 +13,8 @@ class User(Base):
     tg_id = Column(BigInteger, nullable=False)
     orders = relationship('Vacancy', backref='vacancies', lazy=True)
     links = relationship('CategoryLink', backref='category_links', lazy=True)
+    fl_enable = Column(Boolean, default=True)
+    freelance_enable = Column(Boolean, default=True)
 
     def __repr__(self):
         return self.tg_id
@@ -38,6 +40,10 @@ class CategoryLink(Base):
     id = Column(Integer, primary_key=True)
     link = Column(String, nullable = False)
     owner = Column(Integer, ForeignKey('user.id'), nullable=False)
+    type = Column(String, nullable=False)
+    plus_filters = Column(String)
+    minus_filters = Column(String)
+
 
     def __repr__(self):
         return self.link

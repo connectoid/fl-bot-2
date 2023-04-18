@@ -13,6 +13,12 @@ Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 
 
+def get_category_type(link: str):
+    if link.startswith('https://www.fl.ru'):
+        return 'fl'
+    return 'freelance'
+
+
 def add_user(tg_id):
     session = Session()
     user = session.query(User).filter(User.tg_id == tg_id).first()
@@ -85,7 +91,8 @@ def add_category_link(user_id, link) -> bool:
     session = Session()
     existing_link = session.query(CategoryLink).filter(CategoryLink.owner == user_id, CategoryLink.link == link).first()
     if existing_link is None:
-        new_link = CategoryLink(link=link, owner=user_id)
+        type = get_category_type(link)
+        new_link = CategoryLink(link=link, owner=user_id, type=type)
         session.add(new_link)
         session.commit()
         return True
@@ -99,8 +106,20 @@ def clear_user_categories_list(user_id):
 
 
 def get_user_categories_list(user_id):
+    categories_fl_list = []
+    categories_freelance_list = []
     session = Session()
-    categories_list = session.query(CategoryLink).filter(CategoryLink.owner == user_id).all()
+    user = session.query(User).filter(User.id == user_id).first()
+    if user.fl_enable:
+        categories_fl_list = session.query(CategoryLink).filter(
+            CategoryLink.owner == user_id,
+            CategoryLink.type == 'fl').all()
+    if user.freelance_enable:
+        categories_freelance_list = session.query(CategoryLink).filter(
+            CategoryLink.owner == user_id,
+            CategoryLink.type == 'freelance').all()
+    categories_list = categories_fl_list + categories_freelance_list
+    
     return categories_list
 
 
@@ -118,3 +137,37 @@ def is_auto_enabled(user_id):
     if user.is_scheduled:
         return True
     return False
+
+
+def set_plus_filters_list(category_link, filters_list):
+    session = Session()
+    category = session.query(CategoryLink).filter(CategoryLink.link == str(category_link)).first()
+    category.plus_filters = filters_list
+    session.add(category)
+    session.commit()
+
+
+def set_minus_filters_list(category_link, filters_list):
+    session = Session()
+    category = session.query(CategoryLink).filter(CategoryLink.link == str(category_link)).first()
+    category.minus_filters = filters_list
+    session.add(category)
+    session.commit()
+
+
+def get_plus_filters_list(category_link):
+    filters_list = []
+    session = Session()
+    category = session.query(CategoryLink).filter(CategoryLink.link == str(category_link)).first()
+    if category.plus_filters:
+        filters_list = category.plus_filters.split(',')
+    return filters_list
+
+
+def get_minus_filters_list(category_link):
+    filters_list = []
+    session = Session()
+    category = session.query(CategoryLink).filter(CategoryLink.link == str(category_link)).first()
+    if category.minus_filters:
+        filters_list = category.minus_filters.split(',')
+    return filters_list
