@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from config_data.config import Config, load_config
 from handlers import other_handlers, user_handlers
@@ -19,8 +20,9 @@ async def main():
     
     config: Config = load_config()
 
+    storage: MemoryStorage = MemoryStorage()
     bot = Bot(token=config.tg_bot.token, parse_mode='HTML')
-    dp = Dispatcher()
+    dp = Dispatcher(storage=storage)
 
 
     dp.include_router(user_handlers.router)

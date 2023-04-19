@@ -8,7 +8,7 @@ config: Config = load_config()
 
 database_url = f'postgresql://postgres:postgres@{config.db.db_host}:5432/{config.db.database}'
 
-engine = create_engine(database_url, echo=False)
+engine = create_engine(database_url, echo=False, pool_size=20, max_overflow=0)
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 
@@ -171,3 +171,41 @@ def get_minus_filters_list(category_link):
     if category.minus_filters:
         filters_list = category.minus_filters.split(',')
     return filters_list
+
+
+def switch_fl_flag(user_id):
+    session = Session()
+    user = session.query(User).filter(User.id == user_id).first()
+    user.fl_enable = not user.fl_enable
+    session.add(user)
+    session.commit()
+    return user.fl_enable
+
+
+def switch_freelance_flag(user_id):
+    session = Session()
+    user = session.query(User).filter(User.id == user_id).first()
+    user.freelance_enable = not user.freelance_enable
+    session.add(user)
+    session.commit()
+    return user.freelance_enable
+
+
+def get_status(user_id):
+    session = Session()
+    categories = get_user_categories_list(user_id)
+    status_dict = {}
+    if categories:
+        cats_list = []
+        for category in categories:
+            full_category = []
+            full_category.append(category)
+            full_category.append(get_plus_filters_list(category))
+            full_category.append(get_minus_filters_list(category))
+            cats_list.append(full_category)
+        status_dict['categories'] = cats_list
+        user = session.query(User).filter(User.id == user_id).first()
+        status_dict['fl_enabled'] = user.fl_enable
+        status_dict['freelance_enabled'] = user.freelance_enable
+        return status_dict
+    return None
