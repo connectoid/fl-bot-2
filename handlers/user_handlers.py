@@ -1,7 +1,7 @@
 from time import sleep
 from aiogram import Router, Bot
 from aiogram.filters import Command, CommandStart, Text, StateFilter
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.filters import StateFilter
 from aiogram.filters.state import State, StatesGroup
@@ -11,16 +11,18 @@ from aiogram.fsm.state import default_state
 
 
 from services.vacancies import (update_vacancies, check_category_link, request_new_vacansies,
-                                check_filters_list, get_status_message)
+                                check_filters_list, get_status_message, get_category_name,
+                                get_categories_list_menu)
 from services.parser import get_details
-from keyboards.bottom_post_kb import create_bottom_keyboard
+from keyboards.bottom_post_kb import create_bottom_keyboard, create_exchange_keyboard
+from keyboards.main_menu import main_menu_keyboard
 from database.orm import (add_vacancy_to_favorite, get_new_vacancies,
                           get_favorite_vacancies, remove_vacancy_from_favorite,
                           get_vavancy_link, add_user, get_user_id, add_category_link,
                           get_user_categories_list, clear_user_categories_list,
                           check_categories, set_minus_filters_list, set_plus_filters_list,
-                          switch_fl_flag, switch_freelance_flag, get_status)
-from lexicon.lexicon_ru import LEXICON_HELP, NO_ADDED_LINKS, NO_NEW_VACANCIES
+                          switch_exchange_flag, category_exists, get_exchange_status)
+from lexicon.lexicon_ru import LEXICON_HELP, NO_ADDED_LINKS, BACK
 
 REQUEST_INTERVAL = 60
 
@@ -49,62 +51,18 @@ async def process_cancel_command(message: Message):
                               'отправьте команду /addcategory')
     
 
-@router.message(Command(commands='addcategory'), StateFilter(default_state))
-async def process_fillform_command(message: Message, state: FSMContext):
-    await message.answer(text='Пожалуйста, введите ссылку на категорию.\n'
-                         'Если хотите прервать добавелние категории, введите команду /cancel')
-    await state.set_state(FSMAddCategory.add_category_link)
-
-
-@router.message(StateFilter(FSMAddCategory.add_category_link))
-async def process_link_sent(message: Message, state: FSMContext):
-    if check_category_link(message.text):
-        await state.update_data(link=message.text)
-        await message.answer(text='Спасибо!\n\nА теперь добавьте список ключевых слов (через запятую)')
-        await state.set_state(FSMAddCategory.add_plus_filters_list)
-    else:
-        await message.answer(text='Неправильная ссылка (не соотвтетствует ссылке на RSS fl.ru или freelance.ru)\n'
-                             'Введите правильную ссылку на категорию')
-
-
-@router.message(StateFilter(FSMAddCategory.add_plus_filters_list))
-async def process_plus_sent(message: Message, state: FSMContext):
-    if check_filters_list(message.text):
-        await state.update_data(plus_list=message.text)
-        await message.answer(text='Спасибо!\n\nА теперь добавьте список минус слов (через запятую)')
-        await state.set_state(FSMAddCategory.add_minus_filters_list)
-    else:
-        await message.answer(text='Неправильный список')
-
-
-@router.message(StateFilter(FSMAddCategory.add_minus_filters_list))
-async def process_minus_sent(message: Message, state: FSMContext):
-    if check_filters_list(message.text):
-        await state.update_data(minus_list=message.text)
-        user_data = await state.get_data()
-        await state.clear()
-        await message.answer(text='Спасибо!\n\nКатегория и списки добавлены')
-        user_id = get_user_id(message.from_user.id)
-        # print(user_data)
-        if add_category_link(user_id, user_data['link']):
-            set_plus_filters_list(user_data['link'], user_data['plus_list'])
-            set_minus_filters_list(user_data['link'], user_data['minus_list'])
-        else:
-            await message.answer(text='Эта категория уже добавлена')
-    else:
-        await message.answer(text='Неправильный список')
 
 
 @router.message(CommandStart())
 async def process_start_command(message: Message):
     add_user(message.from_user.id)
     user_id = get_user_id(message.from_user.id)
-    await message.answer(text='Вы запустили бот fl-bot')
+    await message.answer(text='Вы запустили fl-bot', reply_markup=ReplyKeyboardRemove())
     if not check_categories(user_id):
         await message.answer(text=NO_ADDED_LINKS)
 
 
-@router.message(Command(commands='startpolling'))
+@router.message(Command(commands='on'))
 async def start_polling(message: Message):
     if not scheduler.get_jobs():
         scheduler.add_job(
@@ -120,7 +78,7 @@ async def start_polling(message: Message):
         await message.answer(text='Автоматический опрос вакансий уже работает')
       
 
-@router.message(Command(commands='stoppolling'))
+@router.message(Command(commands='off'))
 async def stop_polling(message: Message):
     if scheduler.get_jobs():
         scheduler.remove_job('process_request_new_vacancies_silent')
@@ -133,6 +91,13 @@ async def stop_polling(message: Message):
 @router.message(Command(commands='help'))
 async def process_help_command(message: Message):
     await message.answer(text=LEXICON_HELP, disable_web_page_preview=True)
+
+@router.callback_query(Text(text='Помощь'))
+async def process_help_command(callback = CallbackQuery):
+    await callback.message.edit_text(text=LEXICON_HELP,
+                                  reply_markup=create_exchange_keyboard(
+                                        BACK),
+                                        disable_web_page_preview=True)
 
 
 @router.message(Command(commands='get'))
@@ -224,6 +189,7 @@ async def process_clearlinks_command(message: Message):
 
 
 @router.message(Command(commands='showcategories'))
+@router.message(Text(text='Категории'))
 async def process_showlinks_command(message: Message):
     user_id = get_user_id(message.from_user.id)
     categories = get_user_categories_list(user_id)
@@ -240,7 +206,7 @@ async def process_showlinks_command(message: Message):
 @router.message(Command(commands='fl_switch'))
 async def process_fl_switch(message: Message):
     user_id = get_user_id(message.from_user.id)
-    is_switched = switch_fl_flag(user_id)
+    is_switched = switch_exchange_flag(user_id, 'fl')
     if is_switched:
         await message.answer(text='Проверка по сайту fl.ru включена')
     else:
@@ -250,19 +216,159 @@ async def process_fl_switch(message: Message):
 @router.message(Command(commands='freelance_switch'))
 async def process_fl_switch(message: Message):
     user_id = get_user_id(message.from_user.id)
-    is_switched = switch_freelance_flag(user_id)
+    is_switched = switch_exchange_flag(user_id, 'freelance')
     if is_switched:
         await message.answer(text='Проверка по сайту freelance.ru включена')
     else:
         await message.answer(text='Проверка по сайту freelance.ru отключена')
 
 
-@router.message(Command(commands='getstatus'))
-async def process_get_status(message: Message):
-    user_id = get_user_id(message.from_user.id)
-    text = get_status_message(user_id)
-    await message.answer(text=text)
+#@router.message(Command(commands='getstatus'))
+#async def process_get_status(message: Message):
+#    user_id = get_user_id(message.from_user.id)
+#    text = get_status_message(user_id)
+#    await message.answer(text=text)
 
+
+@router.message(Command(commands='menu'))
+async def process_main_menu(message: Message):
+    text = 'Выберите нужный раздел:'
+    await message.answer(text=text,
+                         reply_markup=create_exchange_keyboard(
+                            'Биржи', 'Категории', 'Помощь', 'Выход'
+                         ))
+
+
+@router.callback_query(Text(text=BACK))
+async def process_main_menu_inline(callback: CallbackQuery):
+    # text = 'Выберите нужную категорию:'
+    await callback.message.edit_text(text='Выберите нужный раздел',
+                         reply_markup=create_exchange_keyboard(
+                            'Биржи', 'Категории', 'Помощь', 'Выход'
+                         ))
+
+
+@router.callback_query(Text(text='Выход'))
+async def process_exit_main_menu(callback: CallbackQuery):
+    await callback.message.edit_text(text='Настройки сохранены')
+
+
+@router.callback_query(Text(text='Категории'))
+async def process_showlinks_command(callback: CallbackQuery):
+    user_id = get_user_id(callback.from_user.id)
+    text = get_categories_list_menu(user_id)
+    if text:
+        await callback.message.edit_text(text=text, 
+                                      reply_markup=create_exchange_keyboard(
+                                        'Добавить категорию', 'Удалить категории', BACK
+                         ))
+    else:
+        await callback.message.edit_text(text=NO_ADDED_LINKS,
+                                      reply_markup=create_exchange_keyboard(
+                                        'Добавить категорию', BACK))
+
+
+@router.callback_query(Text(text='Удалить категории'))
+async def process_delete_categories(callback: CallbackQuery):
+    user_id = get_user_id(callback.from_user.id)
+    clear_user_categories_list(user_id)
+    await callback.message.edit_text(text=NO_ADDED_LINKS,
+                                      reply_markup=create_exchange_keyboard(
+                                        'Добавить категорию', BACK))
+
+
+@router.callback_query(Text(text='Добавить категорию'), StateFilter(default_state))
+async def process_fillform_command(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(text='Пожалуйста, введите ссылку на категорию.\n'
+                         'Если хотите прервать добавелние категории, введите команду /cancel')
+    await state.set_state(FSMAddCategory.add_category_link)
+
+
+@router.message(StateFilter(FSMAddCategory.add_category_link))
+async def process_link_sent(message: Message, state: FSMContext):
+    user_id = get_user_id(message.from_user.id)
+    if check_category_link(message.text):
+        if not category_exists(user_id, message.text):
+            await state.update_data(link=message.text)
+            await message.answer(text='Спасибо!\n\nА теперь добавьте список ключевых слов (через запятую)')
+            await state.set_state(FSMAddCategory.add_plus_filters_list)
+        else:
+            await message.answer(text='Данная категория уже была добавлена ранее')
+    else:
+        await message.answer(text='Неправильная ссылка (не соотвтетствует ссылке на RSS fl.ru или freelance.ru)\n'
+                             'Введите правильную ссылку на категорию')
+
+
+@router.message(StateFilter(FSMAddCategory.add_plus_filters_list))
+async def process_plus_sent(message: Message, state: FSMContext):
+    if check_filters_list(message.text):
+        await state.update_data(plus_list=message.text)
+        await message.answer(text='Спасибо!\n\nА теперь добавьте список минус слов (через запятую)')
+        await state.set_state(FSMAddCategory.add_minus_filters_list)
+    else:
+        await message.answer(text='Слова не должны вводиться с новой строки, вводите через запятую')
+
+
+@router.message(StateFilter(FSMAddCategory.add_minus_filters_list))
+async def process_minus_sent(message: Message, state: FSMContext):
+    if check_filters_list(message.text):
+        await state.update_data(minus_list=message.text)
+        user_data = await state.get_data()
+        await state.clear()
+        await message.answer(text='Спасибо!\n\nКатегория и списки добавлены')
+        user_id = get_user_id(message.from_user.id)
+        # print(user_data)
+        category_name = get_category_name(user_data['link'])
+        if add_category_link(user_id, user_data['link'], category_name):
+            set_plus_filters_list(user_data['link'], user_data['plus_list'])
+            set_minus_filters_list(user_data['link'], user_data['minus_list'])
+            text = get_categories_list_menu(user_id)
+            if text:
+                await message.answer(text=text, 
+                                      reply_markup=create_exchange_keyboard(
+                                        'Добавить категорию', 'Удалить категории', BACK
+                         ))
+        else:
+            await message.answer(text='Эта категория уже добавлена')
+    else:
+        await message.answer(text='Неправильный список')
+
+
+@router.callback_query(Text(text='Биржи'))
+async def process_exchanges(callback: CallbackQuery):
+    user_id = get_user_id(callback.from_user.id)
+    sign_fl = lambda u: '✅' if get_exchange_status(u, 'fl') else '❌'
+    sign_freelance = lambda u: '✅' if get_exchange_status(u, 'freelance') else '❌'
+    button_1 = f'{sign_fl(user_id)} fl.ru'
+    button_2 = f'{sign_freelance(user_id)} freelance.ru'
+    await callback.message.edit_text(text='Отметьте нужные биржи:',
+                         reply_markup=create_exchange_keyboard(
+                            button_1, button_2, BACK))
+
+
+@router.callback_query(Text(endswith='fl.ru'))
+async def process_switch_fl(callback: CallbackQuery):
+    user_id = get_user_id(callback.from_user.id)
+    switch_exchange_flag(user_id, 'fl')
+    sign_fl = lambda u: '✅' if get_exchange_status(u, 'fl') else '❌'
+    sign_freelance = lambda u: '✅' if get_exchange_status(u, 'freelance') else '❌'
+    button_1 = f'{sign_fl(user_id)} fl.ru'
+    button_2 = f'{sign_freelance(user_id)} freelance.ru'
+    await callback.message.edit_reply_markup(reply_markup=create_exchange_keyboard(
+                            button_1, button_2, BACK))
+    
+
+@router.callback_query(Text(endswith='freelance.ru'))
+async def process_switch_freelance(callback: CallbackQuery):
+    user_id = get_user_id(callback.from_user.id)
+    switch_exchange_flag(user_id, 'freelance')
+    sign_fl = lambda u: '✅' if get_exchange_status(u, 'fl') else '❌'
+    sign_freelance = lambda u: '✅' if get_exchange_status(u, 'freelance') else '❌'
+    button_1 = f'{sign_fl(user_id)} fl.ru'
+    button_2 = f'{sign_freelance(user_id)} freelance.ru'
+    await callback.message.edit_reply_markup(reply_markup=create_exchange_keyboard(
+                            button_1, button_2, BACK))
+    
 
 @router.message(Command(commands='delmenu'))
 async def del_main_menu(message: Message, bot: Bot):

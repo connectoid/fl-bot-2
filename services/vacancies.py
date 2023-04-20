@@ -7,7 +7,7 @@ from fake_useragent import UserAgent
 from database.orm import (add_vacancy, get_new_vacancies,
                           set_vacancy_reviewed, add_vacancy_to_favorite,
                           get_user_categories_list, get_plus_filters_list, 
-                          get_minus_filters_list, get_status
+                          get_minus_filters_list, get_status, get_category_name_by_link
                           )
 from lexicon.lexicon_ru import NO_ADDED_LINKS, NO_NEW_VACANCIES
 
@@ -25,7 +25,9 @@ freelance_cat_list = [
 
 
 def check_filters_list(filters_list):
-    return True
+    if '\n' in filters_list:
+        return False
+    return True    
 
 
 def get_feed(url):
@@ -42,6 +44,16 @@ def get_feed(url):
     except AttributeError as error:
         print('Ошибка запроса, связи или неверная ссылка на категорию')
         return None
+
+
+def get_category_name(category):
+    feed = get_feed(category)
+    if feed:
+        category_name = feed.title
+        print(category_name)
+        return category_name
+    return None
+
 
 def get_vacancies(user_id, category):
     feed = get_feed(category)
@@ -113,3 +125,24 @@ def get_status_message(user_id):
         return status_message
     else:
         return NO_ADDED_LINKS
+
+
+def prepare_category_name(category_name):
+    if category_name[0].split()[0] == 'Заказы':
+        return f'fl.ru: {category_name[0].split(":")[1][:-1]}'
+    elif category_name[0].split()[0] == 'Freelance.Ru':
+        return f'freelance.ru: {category_name[0].split("Проекты и вакансии")[1]}'
+    return category_name[0]
+
+
+def get_categories_list_menu(user_id):
+    categories = get_user_categories_list(user_id)
+    if categories:
+        categories_list = []
+        categories_list.append('Список категорий:')
+        for category in categories:
+            category_name = get_category_name_by_link(category)
+            categories_list.append(prepare_category_name(category_name))
+        text = '\n'.join(categories_list)
+        return text
+    return None

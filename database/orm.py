@@ -87,12 +87,19 @@ def get_vavancy_link(id):
     return vacancy.link
 
 
-def add_category_link(user_id, link) -> bool:
+def category_exists(user_id, link) -> bool:
     session = Session()
-    existing_link = session.query(CategoryLink).filter(CategoryLink.owner == user_id, CategoryLink.link == link).first()
-    if existing_link is None:
+    if session.query(CategoryLink).filter(CategoryLink.owner == user_id, CategoryLink.link == link).first():
+        return True
+    return False
+    
+
+def add_category_link(user_id, link, name) -> bool:
+    session = Session()
+    if not category_exists(user_id, link):
+        print('=========', name)
         type = get_category_type(link)
-        new_link = CategoryLink(link=link, owner=user_id, type=type)
+        new_link = CategoryLink(name=name, link=link, owner=user_id, type=type)
         session.add(new_link)
         session.commit()
         return True
@@ -119,7 +126,6 @@ def get_user_categories_list(user_id):
             CategoryLink.owner == user_id,
             CategoryLink.type == 'freelance').all()
     categories_list = categories_fl_list + categories_freelance_list
-    
     return categories_list
 
 
@@ -173,13 +179,19 @@ def get_minus_filters_list(category_link):
     return filters_list
 
 
-def switch_fl_flag(user_id):
+def switch_exchange_flag(user_id, exchange: str):
     session = Session()
     user = session.query(User).filter(User.id == user_id).first()
-    user.fl_enable = not user.fl_enable
-    session.add(user)
-    session.commit()
-    return user.fl_enable
+    if exchange == 'fl':
+        user.fl_enable = not user.fl_enable
+        session.add(user)
+        session.commit()
+        return user.fl_enable
+    elif exchange == 'freelance':
+        user.freelance_enable = not user.freelance_enable
+        session.add(user)
+        session.commit()
+        return user.freelance_enable
 
 
 def switch_freelance_flag(user_id):
@@ -189,6 +201,15 @@ def switch_freelance_flag(user_id):
     session.add(user)
     session.commit()
     return user.freelance_enable
+
+
+def get_exchange_status(user_id, exchange: str):
+    session = Session()
+    user = session.query(User).filter(User.id == user_id).first()
+    if exchange == 'fl':
+        return user.fl_enable
+    elif exchange == 'freelance':
+        return user.freelance_enable
 
 
 def get_status(user_id):
@@ -209,3 +230,9 @@ def get_status(user_id):
         status_dict['freelance_enabled'] = user.freelance_enable
         return status_dict
     return None
+
+
+def get_category_name_by_link(category_link):
+    session = Session()
+    category_name = session.query(CategoryLink.name).filter(CategoryLink.link == str(category_link)).first()
+    return category_name

@@ -38,6 +38,7 @@ class Vacancy(Base):
 class CategoryLink(Base):
     __tablename__ = 'category_link'
     id = Column(Integer, primary_key=True)
+    name = Column(String)
     link = Column(String, nullable = False)
     owner = Column(Integer, ForeignKey('user.id'), nullable=False)
     type = Column(String, nullable=False)
