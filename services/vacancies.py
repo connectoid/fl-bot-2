@@ -38,7 +38,7 @@ def get_feed(url):
     session.headers.update(fake_headers)
     try:
         xml = session.get(url)
-        parser = Parser(xml=xml.content, limit = 3)
+        parser = Parser(xml=xml.content, limit = 10)
         feed = parser.parse()
         return feed
     except AttributeError as error:
