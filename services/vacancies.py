@@ -38,7 +38,7 @@ def get_feed(url):
     session.headers.update(fake_headers)
     try:
         xml = session.get(url)
-        parser = Parser(xml=xml.content, limit = 10)
+        parser = Parser(xml=xml.content, limit = 2)
         feed = parser.parse()
         return feed
     except AttributeError as error:
@@ -59,15 +59,19 @@ def get_vacancies(user_id, category):
     feed = get_feed(category)
     if feed:
         for item in feed.feed:
-            print(item.description)
+            description = item.description
+            title = item.title
+            print(title)
+            print(description)
             print(get_plus_filters_list(category))
             print(get_minus_filters_list(category))
             plus_filters_list = get_plus_filters_list(category)
             minus_filters_list = get_minus_filters_list(category)
-            description = item.description
             
-            result1 = (any(map(lambda x: x in description, plus_filters_list)))
-            result2 = not (any(map(lambda x: x in description, minus_filters_list)))
+            result1 = ((any(map(lambda x: x.lower() in description.lower(), plus_filters_list))) or
+                        any(map(lambda x: x.lower() in title.lower(), plus_filters_list)))
+            result2 = not ((any(map(lambda x: x.lower() in description.lower(), minus_filters_list))) or
+                           (any(map(lambda x: x.lower() in title.lower(), minus_filters_list))))
             print(result1, result2)
             if result1 and result2:
                 title = item.title

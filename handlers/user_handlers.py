@@ -38,17 +38,27 @@ class FSMAddCategory(StatesGroup):
 
 @router.message(Command(commands='cancel'), ~StateFilter(default_state))
 async def process_cancel_command_state(message: Message, state: FSMContext):
-    await message.answer(text='Вы вышли из диалога добавления категории\n\n'
-                              'Чтобы снова перейти к добавлению - '
-                              'отправьте команду /addcategory')
+    await message.answer(text='Вы вышли из диалога добавления категории\n\n')
     await state.clear()
+    user_id = get_user_id(message.from_user.id)
+    text = get_categories_list_menu(user_id)
+    if text:
+        await message.answer(text=text, 
+                            reply_markup=create_exchange_keyboard(
+                                'Добавить категорию', 'Удалить категории', BACK
+                            ))
+    else:
+        await message.answer(text='У вас не добавлено ни одной категории',
+                        reply_markup=create_exchange_keyboard(
+                        'Добавить категорию', BACK
+                    ))
+
+
 
 
 @router.message(Command(commands='cancel'), StateFilter(default_state))
 async def process_cancel_command(message: Message):
-    await message.answer(text='Отменять нечего. Вы вне диалога добавления категории\n\n'
-                              'Чтобы перейти к дабавлению - '
-                              'отправьте команду /addcategory')
+    await message.answer(text='Отменять нечего. Вы вне диалога добавления категории\n\n')
     
 
 
@@ -290,7 +300,8 @@ async def process_link_sent(message: Message, state: FSMContext):
     if check_category_link(message.text):
         if not category_exists(user_id, message.text):
             await state.update_data(link=message.text)
-            await message.answer(text='Спасибо!\n\nА теперь добавьте список ключевых слов (через запятую)')
+            await message.answer(text='Спасибо!\n\nА теперь добавьте список ключевых слов (через запятую). '
+                                 'Для пропуска введите /skip')
             await state.set_state(FSMAddCategory.add_plus_filters_list)
         else:
             await message.answer(text='Данная категория уже была добавлена ранее')
@@ -302,8 +313,12 @@ async def process_link_sent(message: Message, state: FSMContext):
 @router.message(StateFilter(FSMAddCategory.add_plus_filters_list))
 async def process_plus_sent(message: Message, state: FSMContext):
     if check_filters_list(message.text):
-        await state.update_data(plus_list=message.text)
-        await message.answer(text='Спасибо!\n\nА теперь добавьте список минус слов (через запятую)')
+        if message.text != '/skip':
+            await state.update_data(plus_list=message.text)
+        else:
+            await state.update_data(plus_list=[])
+        await message.answer(text='Спасибо!\n\nА теперь добавьте список минус слов (через запятую). '
+                            'Для пропуска введите /skip')
         await state.set_state(FSMAddCategory.add_minus_filters_list)
     else:
         await message.answer(text='Слова не должны вводиться с новой строки, вводите через запятую')
@@ -312,7 +327,10 @@ async def process_plus_sent(message: Message, state: FSMContext):
 @router.message(StateFilter(FSMAddCategory.add_minus_filters_list))
 async def process_minus_sent(message: Message, state: FSMContext):
     if check_filters_list(message.text):
-        await state.update_data(minus_list=message.text)
+        if message.text != '/skip':
+            await state.update_data(minus_list=message.text)
+        else:
+            await state.update_data(minus_list=[])
         user_data = await state.get_data()
         await state.clear()
         await message.answer(text='Спасибо!\n\nКатегория и списки добавлены')
@@ -325,9 +343,9 @@ async def process_minus_sent(message: Message, state: FSMContext):
             text = get_categories_list_menu(user_id)
             if text:
                 await message.answer(text=text, 
-                                      reply_markup=create_exchange_keyboard(
+                                    reply_markup=create_exchange_keyboard(
                                         'Добавить категорию', 'Удалить категории', BACK
-                         ))
+                        ))
         else:
             await message.answer(text='Эта категория уже добавлена')
     else:

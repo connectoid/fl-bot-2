@@ -148,7 +148,8 @@ def is_auto_enabled(user_id):
 def set_plus_filters_list(category_link, filters_list):
     session = Session()
     category = session.query(CategoryLink).filter(CategoryLink.link == str(category_link)).first()
-    category.plus_filters = filters_list
+    if filters_list:
+        category.plus_filters = filters_list
     session.add(category)
     session.commit()
 
@@ -156,7 +157,8 @@ def set_plus_filters_list(category_link, filters_list):
 def set_minus_filters_list(category_link, filters_list):
     session = Session()
     category = session.query(CategoryLink).filter(CategoryLink.link == str(category_link)).first()
-    category.minus_filters = filters_list
+    if filters_list:
+        category.minus_filters = filters_list
     session.add(category)
     session.commit()
 
